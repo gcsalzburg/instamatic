@@ -17,26 +17,28 @@ def button1_callback(channel):
 def button2_callback(channel):
 	print("BUTTON 2")
 
+# SFTP file upload callback
+def sftp_callback(xfer, to_be_xfer):
+	print ('Uploading: {0:.0f} %'.format((xfer / to_be_xfer) * 100))
+
+
+# Picture capture fn
 def take_picture():
 	img_filename = strftime("cam-%Y-%m-%d_%H:%M:%S.png", gmtime())
 	camera.capture(img_filename)
 
 	print("PICTURE CAPTURED!")
-	
-#	with SSHClient() as client:
-#		client.set_missing_host_key_policy(AutoAddPolicy())
-#		client.connect(
-#			creds.hostname,
-#			port=22,
-#			username=creds.username,
-#			password=creds.password
-#		)
+
 	with client.open_sftp() as sftp:
-		sftp.put(img_filename,creds.path + '/' + img_filename)
+		sftp.put(img_filename,creds.path + '/' + img_filename, callback=sftp_callback)
+		sftp.close()
 
 	print("IMAGE UPLOADED!")
 
 
+
+print("Starting camera app...")
+print("Opening FTP...")
 
 # Open FTP connection
 client = SSHClient()
@@ -48,9 +50,13 @@ client.connect(
 	password=creds.password
 )
 
+print("Starting camera...")
+
 # Setup camera
 camera = PiCamera()
 camera.resolution = (800,600)
+
+print("Setting up GPIO...")
 
 # Setup IO
 button1 = 2
@@ -66,4 +72,5 @@ GPIO.add_event_detect(button2,GPIO.FALLING,callback=button2_callback)
 # Message output
 print("Camera app started!")
 message=input("Press enter to quit \n\n")
+client.close()
 GPIO.cleanup()
