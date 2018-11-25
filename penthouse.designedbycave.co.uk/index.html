@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1">
+		<title>instamatic</title>
+        <link rel="stylesheet" href="styles.css">
+        <link href="https://fonts.googleapis.com/css?family=Bitter" rel="stylesheet">
+        <script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+        <script>
+        $(function(){
+
+            var photos = $("#photos");
+            function reload_photos(){
+                console.log("Loading photos...");
+                $.getJSON("get_files.php", function(data){
+                    $.each(data.files, function(i,v){
+                        if(!photos.find("img[src='camera/"+v.file+"']").length){
+                            photos.prepend('<img src="camera/'+v.file+'">');
+                        }
+                    });
+                });
+                setTimeout(reload_photos, 5000);
+            }
+
+            reload_photos();
+        });
+        </script>
+
+
+	</head>
+	<body>
+        <h1>instamatic</h1>
+		<section id="photos" class="photos"></section>
+			
+	</body>
+
+</html>
