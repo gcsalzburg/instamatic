@@ -1,5 +1,7 @@
 # Imports
 import RPi.GPIO as GPIO
+import os
+
 from picamera import PiCamera
 from time import gmtime,strftime
 from paramiko import SSHClient, AutoAddPolicy
@@ -34,6 +36,7 @@ def take_picture():
 		sftp.close()
 
 	print("IMAGE UPLOADED!")
+	os.remove(img_filename)
 
 
 
