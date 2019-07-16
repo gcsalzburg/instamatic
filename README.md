@@ -29,6 +29,7 @@ The picture can the be viewed by starting a simple webserver in the folder like 
 ```bash
 python -m SimpleHTTPServer 8080
 ```
+*Idea from: https://unix.stackexchange.com/questions/35333/what-is-the-fastest-way-to-view-images-from-the-terminal*
 
 On any PC on the network, see the image at: http://instamatic.local:8080/test.jpg
 
