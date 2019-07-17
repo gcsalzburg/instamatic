@@ -1,5 +1,6 @@
 # Custom additions
 sftp.py
+photos/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
