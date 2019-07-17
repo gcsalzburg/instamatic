@@ -62,9 +62,16 @@ error: <class 'socket.error'>, [Errno 13] Permission denied: file: /usr/lib/pyth
 
 Can monitor processes from: http://instamatic.local:9001/ (currently no username/password)
 
+To log errors to a script, run:
+```bash
+sudo python appname.py >> logfile.log 2>&1
+```
+From: https://stackoverflow.com/a/30295011/10240581
+
 ## Todo
 
 + Script runs fine and takes photo
+
 
 
 
