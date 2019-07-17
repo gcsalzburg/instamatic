@@ -26,13 +26,16 @@ def sftp_callback(xfer, to_be_xfer):
 
 # Picture capture fn
 def take_picture():
+
+	img_path = "/home/pi/instamatic/photos/"
 	img_filename = strftime("cam-%Y-%m-%d_%H:%M:%S.png", gmtime())
-	camera.capture(img_filename)
+
+	camera.capture(img_path + img_filename)
 
 	print("PICTURE CAPTURED!")
 
 	with client.open_sftp() as sftp:
-		sftp.put(img_filename,creds.path + '/' + img_filename, callback=sftp_callback)
+		sftp.put(img_path + img_filename,creds.path + '/' + img_filename, callback=sftp_callback)
 		sftp.close()
 
 	print("IMAGE UPLOADED!")
@@ -75,5 +78,5 @@ GPIO.add_event_detect(button2,GPIO.FALLING,callback=button2_callback)
 # Message output
 print("Camera app started!")
 message=input("Press enter to quit \n\n")
-client.close()
-GPIO.cleanup()
+# client.close()
+# GPIO.cleanup()
