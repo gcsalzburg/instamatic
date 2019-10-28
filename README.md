@@ -1,11 +1,13 @@
-# instamatic
-1960s Kodak technology meets the 21st century
+# 📸 instamatic
+> 1960s Kodak technology meets the 21st century
 
-Single push SFTP photography!
+Single click (S)FTP photography! (curl POST request in future?)
 
+Original attempt was implemented using a headless Pi Zero. Abandoned due to the slow boot time of the device, and the discovery of the ESP32-CAM. It did, however, work! And allowed push via SFTP.
 
+Documented here for future information:
 
-## Useful links ##
+## Headless Pi Zero ##
 
 ### Setup
 
@@ -13,9 +15,7 @@ Settings up a headless Pi Zero
 https://desertbot.io/blog/headless-pi-zero-w-wifi-setup-windows
 
 > **host:** instamatic.local
->
 > **user:** pi
->
 > **password:** see pw storage manager
 
 Don't forget to enable the camera in the `raspi-config`
@@ -67,13 +67,6 @@ To log errors to a script, run:
 sudo python appname.py >> logfile.log 2>&1
 ```
 From: https://stackoverflow.com/a/30295011/10240581
-
-## Todo
-
-+ Script runs fine and takes photo
-
-
-
 
 ### SFTP 
 
