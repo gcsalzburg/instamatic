@@ -3,11 +3,16 @@
 
 Single click (S)FTP photography! (curl POST request in future?)
 
+## Useful links
+
++ https://www.totalcardiagnostics.com/support/Knowledgebase/Article/View/92/20/prolific-usb-to-serial-fix-official-solution-to-code-10-error
++ https://www.banggood.com/Geekcreit-ESP32-CAM-WiFi-bluetooth-Camera-Module-Development-Board-ESP32-With-Camera-Module-OV2640-p-1394679.html
+
+## Headless Pi Zero ##
+
 Original attempt was implemented using a headless Pi Zero. Abandoned due to the slow boot time of the device, and the discovery of the ESP32-CAM. It did, however, work! And allowed push via SFTP.
 
 Documented here for future information:
-
-## Headless Pi Zero ##
 
 ### Setup
 
