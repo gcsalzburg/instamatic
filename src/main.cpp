@@ -1,9 +1,4 @@
 #include "Arduino.h"
-
-// Enable Debug interface and serial prints over UART1
-#define DEGUB_ESP
-
-// Blynk related Libs
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <esp_camera.h>
@@ -12,17 +7,19 @@
 // Passwords and private config variables
 #include "config.h"
 
-// Connection timeout;
-#define CON_TIMEOUT   10*1000                     // milliseconds
-
-// Not using Deep Sleep on PCB because TPL5110 timer takes over.
-#define TIME_TO_SLEEP (uint64_t)60*60*1000*1000   // microseconds
-
+// Enable Debug interface and serial prints over UART1
+#define DEGUB_ESP
 #ifdef DEGUB_ESP
   #define DBG(x) Serial.println(x)
 #else 
   #define DBG(...)
 #endif
+
+// Connection timeout;
+#define CON_TIMEOUT   10*1000                     // milliseconds
+
+// Not using Deep Sleep on PCB because TPL5110 timer takes over.
+#define TIME_TO_SLEEP (uint64_t)60*60*1000*1000   // microseconds
 
 // Camera buffer, URL and picture name
 camera_fb_t *fb = NULL;
@@ -35,6 +32,10 @@ RTC_DATA_ATTR uint64_t bootCount = 0;
 //WidgetRTC rtc;
 ESP32_FTPClient ftp (ftp_server, ftp_user, ftp_pass);
 
+// Pin definitions
+#define PIN_SHUTTER 16
+#define PIN_LED 13
+
 // Function prototypes
 void deep_sleep(void);
 void FTP_upload( void );
@@ -45,6 +46,10 @@ void setup(){
     Serial.begin(115200);
     Serial.setDebugOutput(true);
   #endif
+
+  // Setup pins
+  pinMode(PIN_LED, OUTPUT);
+  pinMode(PIN_SHUTTER, INPUT_PULLUP);
 
   //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
 
@@ -111,8 +116,12 @@ void setup(){
 }
 
 void loop(){
+
+  Serial.println(digitalRead(PIN_SHUTTER));
+  delay(50);
+
   // Take picture
-  if( take_picture() ){
+ /* if( take_picture() ){
     FTP_upload();
     deep_sleep();
   }else{
@@ -123,7 +132,7 @@ void loop(){
   if( millis() > CON_TIMEOUT){
     DBG("Timeout");
     deep_sleep();
-  }
+  }*/
 }
 
 void deep_sleep(){
