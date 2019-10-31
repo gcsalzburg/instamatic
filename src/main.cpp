@@ -3,6 +3,8 @@
 #include <WiFiClient.h>
 #include <esp_camera.h>
 #include <ESP32_FTPClient.h>
+#include <Adafruit_NeoPixel.h>
+#include <CAVE_Tasks.h>
 
 // Passwords and private config variables
 #include "config.h"
@@ -10,36 +12,56 @@
 // Enable Debug interface and serial prints over UART1
 #define DEGUB_ESP
 #ifdef DEGUB_ESP
+  #define DBG_noln(x) Serial.print(x)
   #define DBG(x) Serial.println(x)
 #else 
   #define DBG(...)
 #endif
 
-// Connection timeout;
-#define CON_TIMEOUT   10*1000                     // milliseconds
-
-// Not using Deep Sleep on PCB because TPL5110 timer takes over.
-#define TIME_TO_SLEEP (uint64_t)60*60*1000*1000   // microseconds
+// Pin definitions
+#define PIN_SHUTTER 16
+#define PIN_LED 13
 
 // Camera buffer, URL and picture name
 camera_fb_t *fb = NULL;
 String pic_name = "";
 String pic_url  = "";
 
-// Variable marked with this attribute will keep its value during a deep sleep / wake cycle.
-RTC_DATA_ATTR uint64_t bootCount = 0;
-
-//WidgetRTC rtc;
 ESP32_FTPClient ftp (ftp_server, ftp_user, ftp_pass);
 
-// Pin definitions
-#define PIN_SHUTTER 16
-#define PIN_LED 13
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(1, PIN_LED, NEO_GRB + NEO_KHZ800);
+
+// Wifi
+const uint16_t wifi_timeout_limit = 10*1000;
+bool has_wifi = false;
+
+// LED control
+typedef struct{
+	uint16_t on;
+	uint16_t off;
+	uint32_t colour;
+}Light_t;
+Light_t light_boot = {300,300,strip.Color(255,255,0)};
+Light_t light_wifi = {3000,30,strip.Color(0,255,0)};
+
+Light_t *light_state;
 
 // Function prototypes
 void deep_sleep(void);
 void FTP_upload( void );
 bool take_picture(void);
+
+// Task function prototypes
+void task_check_connection();
+void task_flash_led();
+void task_check_buttons();
+
+// Table of tasks
+CAVE::Task loop_tasks[] = {
+   {task_check_connection, 500}, // Delay between connection tests
+   {task_flash_led,        16},  // 50fps      
+   {task_check_buttons,    30}   // xxx
+};
 
 void setup(){
   #ifdef DEGUB_ESP
@@ -47,9 +69,19 @@ void setup(){
     Serial.setDebugOutput(true);
   #endif
 
+  // Register tasks
+  CAVE::tasks_register(loop_tasks);
+
   // Setup pins
   pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_SHUTTER, INPUT_PULLUP);
+  light_state = &light_boot;
+
+  // Setup LED
+  strip.begin();
+  strip.setBrightness(20); // max = 255
+  strip.setPixelColor(0,0,0,0);
+  strip.show(); // Initialize all pixels to 'off'
 
   //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
 
@@ -95,30 +127,18 @@ void setup(){
   //s->set_saturation(s, -2); //lower the saturation
   
   // Enable timer wakeup for ESP32 sleep
-  esp_sleep_enable_timer_wakeup( TIME_TO_SLEEP );
+  //esp_sleep_enable_timer_wakeup( TIME_TO_SLEEP );
 
-  WiFi.begin( ssid, pass );
-  DBG("\nConnecting to WiFi");
-
-  while ( WiFi.status() != WL_CONNECTED && millis() < CON_TIMEOUT ){
-    delay(500);
-    Serial.print(".");
-  }
-
-  if( !WiFi.isConnected() ){
-    DBG("Failed to connect to WiFi, going to sleep");
-    deep_sleep();
-  }
-
-  DBG("");
-  DBG("WiFi connected");
-  DBG( WiFi.localIP() );
+   DBG("");
+   DBG("instamatic :-)");
+   DBG("");
+   DBG_noln("Connecting to: "); DBG(ssid);
+   WiFi.begin(ssid, pass);
 }
 
 void loop(){
-
-  Serial.println(digitalRead(PIN_SHUTTER));
-  delay(50);
+	// Call task updater
+	CAVE::tasks_update();
 
   // Take picture
  /* if( take_picture() ){
@@ -135,10 +155,31 @@ void loop(){
   }*/
 }
 
-void deep_sleep(){
-  DBG("Going to sleep after: " + String( millis() ) + "ms");
-  Serial.flush();
-  esp_deep_sleep_start();
+void task_check_connection(){
+   if((millis() < wifi_timeout_limit) && !has_wifi){
+      if(WiFi.status() == WL_CONNECTED){
+         if( !WiFi.isConnected() ){
+            DBG("Failed to connect to WiFi.");
+         }else{
+            has_wifi = true; 
+            DBG_noln("WiFi connected on: "); DBG(WiFi.localIP());
+            light_state = &light_wifi;
+         }
+      }
+   }
+}
+
+void task_flash_led(){
+   if( (millis()%(light_state->off+light_state->on)) <= light_state->on){
+      strip.setPixelColor(0,light_state->colour);
+   }else{
+      strip.setPixelColor(0,0,0,0);
+   }
+   strip.show();
+}
+
+void task_check_buttons(){
+ //  DBG(digitalRead(PIN_SHUTTER));
 }
 
 bool take_picture(){
