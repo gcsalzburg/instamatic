@@ -1,6 +1,7 @@
 # Custom additions
 sftp.py
 photos/
+include/config.h
 src/config.h
 
 # PlatformIO
