@@ -1,8 +1,10 @@
 #include "Arduino.h"
+
 #include <WiFi.h>
-#include <WiFiClient.h>
+#include <esp_http_client.h>
 #include <esp_camera.h>
-#include <ESP32_FTPClient.h>
+
+#include <Bounce2.h>
 #include <Adafruit_NeoPixel.h>
 #include <CAVE_Tasks.h>
 
@@ -22,12 +24,12 @@
 #define PIN_SHUTTER 16
 #define PIN_LED 13
 
+#define DEBOUNCE_INTERVAL   25
+
 // Camera buffer, URL and picture name
 camera_fb_t *fb = NULL;
 String pic_name = "";
 String pic_url  = "";
-
-ESP32_FTPClient ftp (ftp_server, ftp_user, ftp_pass);
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(1, PIN_LED, NEO_GRB + NEO_KHZ800);
 
@@ -46,10 +48,16 @@ Light_t light_wifi = {3000,30,strip.Color(0,255,0)};
 
 Light_t *light_state;
 
+// Buttons
+Bounce shutter = Bounce(PIN_SHUTTER,DEBOUNCE_INTERVAL);
+
+const char *post_url = "https://penthouse.designedbycave.co.uk/upload.php?code=12345678"; // Location where images are POSTED
+
 // Function prototypes
 void deep_sleep(void);
-void FTP_upload( void );
 bool take_picture(void);
+static esp_err_t take_send_photo(void);
+esp_err_t _http_event_handler(esp_http_client_event_t *evt);
 
 // Task function prototypes
 void task_check_connection();
@@ -60,7 +68,7 @@ void task_check_buttons();
 CAVE::Task loop_tasks[] = {
    {task_check_connection, 500}, // Delay between connection tests
    {task_flash_led,        16},  // 50fps      
-   {task_check_buttons,    30}   // xxx
+   {task_check_buttons,    30}   // xxx    
 };
 
 void setup(){
@@ -139,24 +147,11 @@ void setup(){
 void loop(){
 	// Call task updater
 	CAVE::tasks_update();
-
-  // Take picture
- /* if( take_picture() ){
-    FTP_upload();
-    deep_sleep();
-  }else{
-    DBG("Capture failed, sleeping");
-    deep_sleep();
-  }
-
-  if( millis() > CON_TIMEOUT){
-    DBG("Timeout");
-    deep_sleep();
-  }*/
 }
 
 void task_check_connection(){
    if((millis() < wifi_timeout_limit) && !has_wifi){
+      DBG_noln(".");
       if(WiFi.status() == WL_CONNECTED){
          if( !WiFi.isConnected() ){
             DBG("Failed to connect to WiFi.");
@@ -179,38 +174,78 @@ void task_flash_led(){
 }
 
 void task_check_buttons(){
- //  DBG(digitalRead(PIN_SHUTTER));
+   shutter.update();
+	if(shutter.fell()){
+      DBG("Shutter pressed");
+      take_send_photo();
+   }
 }
 
-bool take_picture(){
-  DBG("Taking picture now");
-  fb = esp_camera_fb_get();  
-  if(!fb){
-    DBG("Camera capture failed");
-    return false;
+esp_err_t _http_event_handler(esp_http_client_event_t *evt){
+  switch (evt->event_id) {
+    case HTTP_EVENT_ERROR:
+      Serial.println("HTTP_EVENT_ERROR");
+      break;
+    case HTTP_EVENT_ON_CONNECTED:
+      Serial.println("HTTP_EVENT_ON_CONNECTED");
+      break;
+    case HTTP_EVENT_HEADER_SENT:
+      Serial.println("HTTP_EVENT_HEADER_SENT");
+      break;
+    case HTTP_EVENT_ON_HEADER:
+      Serial.println();
+      Serial.printf("HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+      break;
+    case HTTP_EVENT_ON_DATA:
+      Serial.println();
+      Serial.printf("HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+      if (!esp_http_client_is_chunked_response(evt->client)) {
+        // Write out data
+        Serial.printf("%.*s", evt->data_len, (char*)evt->data);
+      }
+      break;
+    case HTTP_EVENT_ON_FINISH:
+      Serial.println("");
+      Serial.println("HTTP_EVENT_ON_FINISH");
+      break;
+    case HTTP_EVENT_DISCONNECTED:
+      Serial.println("HTTP_EVENT_DISCONNECTED");
+      break;
   }
-  
-  // Rename the picture with the time string
-  // pic_name += String( now() ) + ".jpg";
-  pic_name += "blah.jpg";
-  DBG("Camera capture success, saved as:");
-  DBG( pic_name );
-  return true;
+  return ESP_OK;
 }
 
-void FTP_upload(){
-  DBG("Uploading via FTP");
- 
-  ftp.OpenConnection();
-  
-  //Create a file and write the image data to it;
-  ftp.InitFile("Type I");
-  ftp.ChangeWorkDir("/penthouse.designedbycave.co.uk/camera"); // change it to reflect your directory
-  const char *f_name = pic_name.c_str();
-  ftp.NewFile( f_name );
-  ftp.WriteData(fb->buf, fb->len);
-  ftp.CloseFile();
+static esp_err_t take_send_photo(){
+  Serial.println("Taking picture...");
+  camera_fb_t * fb = NULL;
+  esp_err_t res = ESP_OK;
 
-  // Breath, withouth delay URL failed to update.
-  delay(100);
+  fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("Camera capture failed");
+    return ESP_FAIL;
+  }
+
+  esp_http_client_handle_t http_client;
+  
+  esp_http_client_config_t config_client = {0};
+  config_client.url = post_url;
+  config_client.event_handler = _http_event_handler;
+  config_client.method = HTTP_METHOD_POST;
+
+  http_client = esp_http_client_init(&config_client);
+
+  esp_http_client_set_post_field(http_client, (const char *)fb->buf, fb->len);
+
+  esp_http_client_set_header(http_client, "Content-Type", "image/jpg");
+
+  esp_err_t err = esp_http_client_perform(http_client);
+  if (err == ESP_OK) {
+    Serial.print("esp_http_client_get_status_code: ");
+    Serial.println(esp_http_client_get_status_code(http_client));
+  }
+
+  esp_http_client_cleanup(http_client);
+
+  esp_camera_fb_return(fb);
 }
