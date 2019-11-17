@@ -11,27 +11,22 @@
 // Passwords and private config variables
 #include "config.h"
 
-// Enable Debug interface and serial prints over UART1
-#define DEGUB_ESP
-#ifdef DEGUB_ESP
-  #define DBG_noln(x) Serial.print(x)
-  #define DBG(x) Serial.println(x)
-#else 
-  #define DBG(...)
-#endif
+// Define debug interface over UART1
+#define DBG_noln(x) Serial.print(x)
+#define DBG(x) Serial.println(x)
 
 // Pin definitions
 #define PIN_SHUTTER 16
 #define PIN_LED 13
 
+// Switch definitions
 #define DEBOUNCE_INTERVAL   25
+Bounce shutter = Bounce(PIN_SHUTTER,DEBOUNCE_INTERVAL);
 
 // Camera buffer, URL and picture name
 camera_fb_t *fb = NULL;
 String pic_name = "";
 String pic_url  = "";
-
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(1, PIN_LED, NEO_GRB + NEO_KHZ800);
 
 // Wifi
 const uint16_t wifi_timeout_limit = 10*1000;
@@ -43,19 +38,15 @@ typedef struct{
 	uint16_t off;
 	uint32_t colour;
 }Light_t;
+
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(1, PIN_LED, NEO_GRB + NEO_KHZ800);
+
 Light_t light_boot = {300,300,strip.Color(255,255,0)};
-Light_t light_wifi = {3000,30,strip.Color(0,255,0)};
-
-Light_t *light_state;
-
-// Buttons
-Bounce shutter = Bounce(PIN_SHUTTER,DEBOUNCE_INTERVAL);
-
-const char *post_url = "https://penthouse.designedbycave.co.uk/upload.php?code=12345678"; // Location where images are POSTED
+Light_t light_ready = {3000,30,strip.Color(0,255,0)};
+Light_t light_upload = {150,50,strip.Color(200,0,200)};
+Light_t *light_state;   // Which light is it currently showing
 
 // Function prototypes
-void deep_sleep(void);
-bool take_picture(void);
 static esp_err_t take_send_photo(void);
 esp_err_t _http_event_handler(esp_http_client_event_t *evt);
 
@@ -72,61 +63,59 @@ CAVE::Task loop_tasks[] = {
 };
 
 void setup(){
-  #ifdef DEGUB_ESP
-    Serial.begin(115200);
-    Serial.setDebugOutput(true);
-  #endif
+   Serial.begin(115200);
+   Serial.setDebugOutput(true);
 
-  // Register tasks
-  CAVE::tasks_register(loop_tasks);
+   // Register tasks
+   CAVE::tasks_register(loop_tasks);
 
-  // Setup pins
-  pinMode(PIN_LED, OUTPUT);
-  pinMode(PIN_SHUTTER, INPUT_PULLUP);
-  light_state = &light_boot;
+   // Setup pins
+   pinMode(PIN_LED, OUTPUT);
+   pinMode(PIN_SHUTTER, INPUT_PULLUP);
+   light_state = &light_boot;
 
-  // Setup LED
-  strip.begin();
-  strip.setBrightness(20); // max = 255
-  strip.setPixelColor(0,0,0,0);
-  strip.show(); // Initialize all pixels to 'off'
+   // Setup LED
+   strip.begin();
+   strip.setBrightness(20); // max = 255
+   strip.setPixelColor(0,0,0,0);
+   strip.show(); // Initialize all pixels to 'off'
 
-  //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
+   //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
 
-  camera_config_t config;
-  config.ledc_channel = LEDC_CHANNEL_0;
-  config.ledc_timer   = LEDC_TIMER_0;
-  config.pin_d0       = 5;
-  config.pin_d1       = 18;
-  config.pin_d2       = 19;
-  config.pin_d3       = 21;
-  config.pin_d4       = 36;
-  config.pin_d5       = 39;
-  config.pin_d6       = 34;
-  config.pin_d7       = 35;
-  config.pin_xclk     = 0;
-  config.pin_pclk     = 22;
-  config.pin_vsync    = 25;
-  config.pin_href     = 23;
-  config.pin_sscb_sda = 26;
-  config.pin_sscb_scl = 27;
-  config.pin_pwdn     = 32;
-  config.pin_reset    = -1;
-  config.xclk_freq_hz = 20000000;
-  config.pixel_format = PIXFORMAT_JPEG;
+   camera_config_t config;
+   config.ledc_channel = LEDC_CHANNEL_0;
+   config.ledc_timer   = LEDC_TIMER_0;
+   config.pin_d0       = 5;
+   config.pin_d1       = 18;
+   config.pin_d2       = 19;
+   config.pin_d3       = 21;
+   config.pin_d4       = 36;
+   config.pin_d5       = 39;
+   config.pin_d6       = 34;
+   config.pin_d7       = 35;
+   config.pin_xclk     = 0;
+   config.pin_pclk     = 22;
+   config.pin_vsync    = 25;
+   config.pin_href     = 23;
+   config.pin_sscb_sda = 26;
+   config.pin_sscb_scl = 27;
+   config.pin_pwdn     = 32;
+   config.pin_reset    = -1;
+   config.xclk_freq_hz = 20000000;
+   config.pixel_format = PIXFORMAT_JPEG;
 
-  //init with high specs to pre-allocate larger buffers
-  config.frame_size = FRAMESIZE_XGA; // set picture size, FRAMESIZE_XGA = 1024x768
-  config.jpeg_quality = 10;          // quality of JPEG output. 0-63 lower means higher quality
-  config.fb_count = 2;
+   //init with high specs to pre-allocate larger buffers
+   config.frame_size = FRAMESIZE_XGA; // set picture size, FRAMESIZE_XGA = 1024x768
+   config.jpeg_quality = 10;          // quality of JPEG output. 0-63 lower means higher quality
+   config.fb_count = 2;
 
-  // camera init
-  esp_err_t err = esp_camera_init(&config);
-  if (err != ESP_OK){
-    Serial.print("Camera init failed with error 0x%x");
-    DBG(err);
-    return;
-  }
+   // camera init
+   esp_err_t err = esp_camera_init(&config);
+   if (err != ESP_OK){
+      Serial.print("Camera init failed with error 0x%x");
+      DBG(err);
+      return;
+   }
 
   // Change extra settings if required
   //sensor_t * s = esp_camera_sensor_get();
@@ -138,7 +127,7 @@ void setup(){
   //esp_sleep_enable_timer_wakeup( TIME_TO_SLEEP );
 
    DBG("");
-   DBG("instamatic :-)");
+   DBG("[[ instamatic ]]");
    DBG("");
    DBG_noln("Connecting to: "); DBG(ssid);
    WiFi.begin(ssid, pass);
@@ -158,7 +147,7 @@ void task_check_connection(){
          }else{
             has_wifi = true; 
             DBG_noln("WiFi connected on: "); DBG(WiFi.localIP());
-            light_state = &light_wifi;
+            light_state = &light_ready;
          }
       }
    }
@@ -225,6 +214,7 @@ static esp_err_t take_send_photo(){
     Serial.println("Camera capture failed");
     return ESP_FAIL;
   }
+  light_state = &light_upload;
 
   esp_http_client_handle_t http_client;
   
@@ -248,4 +238,5 @@ static esp_err_t take_send_photo(){
   esp_http_client_cleanup(http_client);
 
   esp_camera_fb_return(fb);
+  light_state = &light_ready;
 }
