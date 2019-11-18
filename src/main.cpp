@@ -45,7 +45,7 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(1, PIN_LED, NEO_GRB + NEO_KHZ800);
 Light_t light_boot = {300,300,strip.Color(255,255,0)};
 Light_t light_ready = {3000,30,strip.Color(0,255,0)};
 Light_t light_capture = {1000,0,strip.Color(255,255,255)};
-Light_t light_upload = {150,50,strip.Color(200,0,200)};
+Light_t light_upload = {150,0,strip.Color(200,0,200)};
 Light_t *light_state;   // Which light is it currently showing
 
 // Function prototypes
@@ -185,82 +185,83 @@ void task_check_buttons(){
    shutter.update();
 	if(shutter.fell()){
       DBG("Shutter pressed");
-      set_led_state(&light_capture);
-      take_send_photo();
+      if(has_wifi){
+         take_send_photo();
+      }
   }
 }
 
 
+// Handler for HTTP events
 esp_err_t _http_event_handler(esp_http_client_event_t *evt){
-  switch (evt->event_id) {
-    case HTTP_EVENT_ERROR:
-      Serial.println("HTTP_EVENT_ERROR");
-      break;
-    case HTTP_EVENT_ON_CONNECTED:
-      Serial.println("HTTP_EVENT_ON_CONNECTED");
-      break;
-    case HTTP_EVENT_HEADER_SENT:
-      Serial.println("HTTP_EVENT_HEADER_SENT");
-      break;
-    case HTTP_EVENT_ON_HEADER:
-      Serial.println();
-      Serial.printf("HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
-      break;
-    case HTTP_EVENT_ON_DATA:
-      Serial.println();
-      Serial.printf("HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
-      if (!esp_http_client_is_chunked_response(evt->client)) {
-        // Write out data
-        // printf("%.*s", evt->data_len, (char*)evt->data);
-      }
-      break;
-    case HTTP_EVENT_ON_FINISH:
-      Serial.println("");
-      Serial.println("HTTP_EVENT_ON_FINISH");
-      break;
-    case HTTP_EVENT_DISCONNECTED:
-      Serial.println("HTTP_EVENT_DISCONNECTED");
-      break;
+   switch (evt->event_id) {
+      case HTTP_EVENT_ERROR:
+         DBG(" > HTTP_EVENT_ERROR");
+         break;
+      case HTTP_EVENT_ON_CONNECTED:
+         DBG(" > HTTP_EVENT_ON_CONNECTED");
+         break;
+      case HTTP_EVENT_HEADER_SENT:
+         DBG(" > HTTP_EVENT_HEADER_SENT");
+         break;
+      case HTTP_EVENT_ON_HEADER:
+         //DBG(" > HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+         break;
+      case HTTP_EVENT_ON_DATA:
+         DBG(" > HTTP_EVENT_ON_DATA");
+         if (!esp_http_client_is_chunked_response(evt->client)) {
+            // Write out data
+            DBG_noln(" > > ");
+            DBG((char*)evt->data);
+         }
+         break;
+      case HTTP_EVENT_ON_FINISH:
+         DBG(" > HTTP_EVENT_ON_FINISH");
+         break;
+      case HTTP_EVENT_DISCONNECTED:
+         DBG(" > HTTP_EVENT_DISCONNECTED");
+         break;
   }
   return ESP_OK;
 }
 
-
+// Captures a picture
 static esp_err_t take_send_photo(){
-  Serial.println("Taking picture...");
-  camera_fb_t * fb = NULL;
-  esp_err_t res = ESP_OK;
+   set_led_state(&light_capture);
+   DBG("Taking picture...");
+   camera_fb_t * fb = NULL;
+   esp_err_t res = ESP_OK;
 
-  digitalWrite(PIN_FLASH,HIGH);
-  fb = esp_camera_fb_get();
-  digitalWrite(PIN_FLASH,LOW);
-  if (!fb) {
-    Serial.println("Camera capture failed");
-    return ESP_FAIL;
-  }
-  set_led_state(&light_upload);
+   fb = esp_camera_fb_get();
+   if (!fb) {
+      DBG("Camera capture failed");
+      return ESP_FAIL;
+   }
+   set_led_state(&light_upload);
 
-  esp_http_client_handle_t http_client;
-  
-  esp_http_client_config_t config_client = {0};
-  config_client.url = post_url;
-  config_client.event_handler = _http_event_handler;
-  config_client.method = HTTP_METHOD_POST;
+   esp_http_client_handle_t http_client;
 
-  http_client = esp_http_client_init(&config_client);
+   esp_http_client_config_t config_client = {0};
+   config_client.url = post_url;
+   config_client.event_handler = _http_event_handler;
+   config_client.method = HTTP_METHOD_POST;
 
-  esp_http_client_set_post_field(http_client, (const char *)fb->buf, fb->len);
+   http_client = esp_http_client_init(&config_client);
 
-  esp_http_client_set_header(http_client, "Content-Type", "image/jpg");
+   esp_http_client_set_post_field(http_client, (const char *)fb->buf, fb->len);
 
-  esp_err_t err = esp_http_client_perform(http_client);
-  if (err == ESP_OK) {
-    Serial.print("esp_http_client_get_status_code: ");
-    Serial.println(esp_http_client_get_status_code(http_client));
-  }
+   esp_http_client_set_header(http_client, "Content-Type", "image/jpg");
 
-  esp_http_client_cleanup(http_client);
+   esp_err_t err = esp_http_client_perform(http_client);
+   if (err == ESP_OK) {
+      DBG_noln(" > HTTP_CLIENT_STATUS_CODE");
+      DBG(esp_http_client_get_status_code(http_client));
+   }
 
-  esp_camera_fb_return(fb);
-  set_led_state(&light_ready);
+   esp_http_client_cleanup(http_client);
+
+   esp_camera_fb_return(fb);
+   set_led_state(&light_ready);
+
+   return res;
 }
