@@ -3,6 +3,11 @@
 
 Single click (S)FTP photography! (curl POST request in future?)
 
+Notes on GPIO
+
++ IO4 = Flash light
++ IO16 = Crashes camera if held low when photo call initiated?
+
 ## Useful links
 
 + https://www.totalcardiagnostics.com/support/Knowledgebase/Article/View/92/20/prolific-usb-to-serial-fix-official-solution-to-code-10-error

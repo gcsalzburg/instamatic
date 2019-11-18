@@ -16,7 +16,8 @@
 #define DBG(x) Serial.println(x)
 
 // Pin definitions
-#define PIN_SHUTTER 16
+#define PIN_SHUTTER 2
+#define PIN_FLASH 4
 #define PIN_LED 13
 
 // Switch definitions
@@ -61,7 +62,7 @@ void task_check_buttons();
 CAVE::Task loop_tasks[] = {
    {task_check_connection, 500}, // Delay between connection tests
    {task_flash_led,        16},  // 50fps      
-   {task_check_buttons,    30}   // xxx    
+   {task_check_buttons,    100}   // xxx    
 };
 
 void setup(){
@@ -72,8 +73,10 @@ void setup(){
    CAVE::tasks_register(loop_tasks);
 
    // Setup pins
+   pinMode(PIN_FLASH, OUTPUT);
    pinMode(PIN_LED, OUTPUT);
    pinMode(PIN_SHUTTER, INPUT_PULLUP);
+   digitalWrite(PIN_FLASH, LOW);
    set_led_state(&light_boot);
 
    // Setup LED
@@ -82,51 +85,54 @@ void setup(){
    strip.setPixelColor(0,0,0,0);
    strip.show(); // Initialize all pixels to 'off'
 
-   //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
-
    camera_config_t config;
    config.ledc_channel = LEDC_CHANNEL_0;
-   config.ledc_timer   = LEDC_TIMER_0;
-   config.pin_d0       = 5;
-   config.pin_d1       = 18;
-   config.pin_d2       = 19;
-   config.pin_d3       = 21;
-   config.pin_d4       = 36;
-   config.pin_d5       = 39;
-   config.pin_d6       = 34;
-   config.pin_d7       = 35;
-   config.pin_xclk     = 0;
-   config.pin_pclk     = 22;
-   config.pin_vsync    = 25;
-   config.pin_href     = 23;
-   config.pin_sscb_sda = 26;
-   config.pin_sscb_scl = 27;
-   config.pin_pwdn     = 32;
-   config.pin_reset    = -1;
+   config.ledc_timer = LEDC_TIMER_0;
+   config.pin_d0 = Y2_GPIO_NUM;
+   config.pin_d1 = Y3_GPIO_NUM;
+   config.pin_d2 = Y4_GPIO_NUM;
+   config.pin_d3 = Y5_GPIO_NUM;
+   config.pin_d4 = Y6_GPIO_NUM;
+   config.pin_d5 = Y7_GPIO_NUM;
+   config.pin_d6 = Y8_GPIO_NUM;
+   config.pin_d7 = Y9_GPIO_NUM;
+   config.pin_xclk = XCLK_GPIO_NUM;
+   config.pin_pclk = PCLK_GPIO_NUM;
+   config.pin_vsync = VSYNC_GPIO_NUM;
+   config.pin_href = HREF_GPIO_NUM;
+   config.pin_sscb_sda = SIOD_GPIO_NUM;
+   config.pin_sscb_scl = SIOC_GPIO_NUM;
+   config.pin_pwdn = PWDN_GPIO_NUM;
+   config.pin_reset = RESET_GPIO_NUM;
    config.xclk_freq_hz = 20000000;
    config.pixel_format = PIXFORMAT_JPEG;
-
    //init with high specs to pre-allocate larger buffers
-   config.frame_size = FRAMESIZE_UXGA; // set picture size, FRAMESIZE_XGA = 1024x768
-   config.jpeg_quality = 10;          // quality of JPEG output. 0-63 lower means higher quality
-   config.fb_count = 2;
+   if (psramFound()) {
+      config.frame_size = FRAMESIZE_UXGA;
+      config.jpeg_quality = 10;
+      config.fb_count = 2;
+   } else {
+      config.frame_size = FRAMESIZE_SVGA;
+      config.jpeg_quality = 12;
+      config.fb_count = 1;
+   }
 
    // camera init
    esp_err_t err = esp_camera_init(&config);
-   if (err != ESP_OK){
-      Serial.print("Camera init failed with error 0x%x");
+   if (err != ESP_OK) {
+      DBG("Camera init failed with error 0x%x");
       DBG(err);
       return;
    }
 
-  // Change extra settings if required
-  //sensor_t * s = esp_camera_sensor_get();
-  //s->set_vflip(s, 0);       //flip it back
-  //s->set_brightness(s, 1);  //up the blightness just a bit
-  //s->set_saturation(s, -2); //lower the saturation
-  
-  // Enable timer wakeup for ESP32 sleep
-  //esp_sleep_enable_timer_wakeup( TIME_TO_SLEEP );
+   // Change extra settings if required
+   //sensor_t * s = esp_camera_sensor_get();
+   //s->set_vflip(s, 0);       //flip it back
+   //s->set_brightness(s, 1);  //up the blightness just a bit
+   //s->set_saturation(s, -2); //lower the saturation
+
+   // Enable timer wakeup for ESP32 sleep
+   //esp_sleep_enable_timer_wakeup( TIME_TO_SLEEP );
 
    DBG("");
    DBG("[[ instamatic ]]");
@@ -181,8 +187,9 @@ void task_check_buttons(){
       DBG("Shutter pressed");
       set_led_state(&light_capture);
       take_send_photo();
-   }
+  }
 }
+
 
 esp_err_t _http_event_handler(esp_http_client_event_t *evt){
   switch (evt->event_id) {
@@ -204,7 +211,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt){
       Serial.printf("HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
       if (!esp_http_client_is_chunked_response(evt->client)) {
         // Write out data
-        Serial.printf("%.*s", evt->data_len, (char*)evt->data);
+        // printf("%.*s", evt->data_len, (char*)evt->data);
       }
       break;
     case HTTP_EVENT_ON_FINISH:
@@ -218,12 +225,15 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt){
   return ESP_OK;
 }
 
+
 static esp_err_t take_send_photo(){
   Serial.println("Taking picture...");
   camera_fb_t * fb = NULL;
   esp_err_t res = ESP_OK;
 
+  digitalWrite(PIN_FLASH,HIGH);
   fb = esp_camera_fb_get();
+  digitalWrite(PIN_FLASH,LOW);
   if (!fb) {
     Serial.println("Camera capture failed");
     return ESP_FAIL;
