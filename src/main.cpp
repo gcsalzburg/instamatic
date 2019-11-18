@@ -43,10 +43,12 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(1, PIN_LED, NEO_GRB + NEO_KHZ800);
 
 Light_t light_boot = {300,300,strip.Color(255,255,0)};
 Light_t light_ready = {3000,30,strip.Color(0,255,0)};
+Light_t light_capture = {1000,0,strip.Color(255,255,255)};
 Light_t light_upload = {150,50,strip.Color(200,0,200)};
 Light_t *light_state;   // Which light is it currently showing
 
 // Function prototypes
+void set_led_state(Light_t *new_state);
 static esp_err_t take_send_photo(void);
 esp_err_t _http_event_handler(esp_http_client_event_t *evt);
 
@@ -72,7 +74,7 @@ void setup(){
    // Setup pins
    pinMode(PIN_LED, OUTPUT);
    pinMode(PIN_SHUTTER, INPUT_PULLUP);
-   light_state = &light_boot;
+   set_led_state(&light_boot);
 
    // Setup LED
    strip.begin();
@@ -105,7 +107,7 @@ void setup(){
    config.pixel_format = PIXFORMAT_JPEG;
 
    //init with high specs to pre-allocate larger buffers
-   config.frame_size = FRAMESIZE_XGA; // set picture size, FRAMESIZE_XGA = 1024x768
+   config.frame_size = FRAMESIZE_UXGA; // set picture size, FRAMESIZE_XGA = 1024x768
    config.jpeg_quality = 10;          // quality of JPEG output. 0-63 lower means higher quality
    config.fb_count = 2;
 
@@ -133,26 +135,36 @@ void setup(){
    WiFi.begin(ssid, pass);
 }
 
+// Main loop timer
 void loop(){
 	// Call task updater
 	CAVE::tasks_update();
 }
 
+// Sets the LED to the new state flasher
+void set_led_state(Light_t *new_state){
+   light_state = new_state;
+   task_flash_led();
+}
+
+// Checks if wifi connection has been set yet
 void task_check_connection(){
    if((millis() < wifi_timeout_limit) && !has_wifi){
       DBG_noln(".");
       if(WiFi.status() == WL_CONNECTED){
+         DBG("");
          if( !WiFi.isConnected() ){
             DBG("Failed to connect to WiFi.");
          }else{
             has_wifi = true; 
             DBG_noln("WiFi connected on: "); DBG(WiFi.localIP());
-            light_state = &light_ready;
+            set_led_state(&light_ready);
          }
       }
    }
 }
 
+// Flashes LED in given timing
 void task_flash_led(){
    if( (millis()%(light_state->off+light_state->on)) <= light_state->on){
       strip.setPixelColor(0,light_state->colour);
@@ -162,10 +174,12 @@ void task_flash_led(){
    strip.show();
 }
 
+// Check for button presses on shutter etc... 
 void task_check_buttons(){
    shutter.update();
 	if(shutter.fell()){
       DBG("Shutter pressed");
+      set_led_state(&light_capture);
       take_send_photo();
    }
 }
@@ -214,7 +228,7 @@ static esp_err_t take_send_photo(){
     Serial.println("Camera capture failed");
     return ESP_FAIL;
   }
-  light_state = &light_upload;
+  set_led_state(&light_upload);
 
   esp_http_client_handle_t http_client;
   
@@ -238,5 +252,5 @@ static esp_err_t take_send_photo(){
   esp_http_client_cleanup(http_client);
 
   esp_camera_fb_return(fb);
-  light_state = &light_ready;
+  set_led_state(&light_ready);
 }
