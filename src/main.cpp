@@ -15,6 +15,8 @@
 #define DBG_noln(x) Serial.print(x)
 #define DBG(x) Serial.println(x)
 
+#define USE_FLASH 0
+
 // Pin definitions
 #define PIN_SHUTTER 2
 #define PIN_FLASH 4
@@ -30,7 +32,7 @@ String pic_name = "";
 String pic_url  = "";
 
 // Wifi
-const uint16_t wifi_timeout_limit = 10*1000;
+const uint16_t wifi_timeout_limit = 20*1000;
 bool has_wifi = false;
 
 // LED control
@@ -44,7 +46,7 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(1, PIN_LED, NEO_GRB + NEO_KHZ800);
 
 Light_t light_boot = {300,300,strip.Color(255,255,0)};
 Light_t light_ready = {3000,30,strip.Color(0,255,0)};
-Light_t light_capture = {1000,0,strip.Color(255,255,255)};
+Light_t light_capture = {1000,0,strip.Color(0,0,255)};
 Light_t light_upload = {150,0,strip.Color(200,0,200)};
 Light_t *light_state;   // Which light is it currently showing
 
@@ -62,7 +64,7 @@ void task_check_buttons();
 CAVE::Task loop_tasks[] = {
    {task_check_connection, 500}, // Delay between connection tests
    {task_flash_led,        16},  // 50fps      
-   {task_check_buttons,    100}   // xxx    
+   {task_check_buttons,    10}   // Fast sampling of button pushes    
 };
 
 void setup(){
@@ -108,7 +110,7 @@ void setup(){
    config.pixel_format = PIXFORMAT_JPEG;
    //init with high specs to pre-allocate larger buffers
    if (psramFound()) {
-      config.frame_size = FRAMESIZE_UXGA;
+      config.frame_size = FRAMESIZE_SXGA;
       config.jpeg_quality = 10;
       config.fb_count = 2;
    } else {
@@ -232,7 +234,15 @@ static esp_err_t take_send_photo(){
    camera_fb_t * fb = NULL;
    esp_err_t res = ESP_OK;
 
+   if(USE_FLASH){
+      digitalWrite(PIN_FLASH,HIGH);
+   }
+   delay(200);
    fb = esp_camera_fb_get();
+   delay(50);
+   if(USE_FLASH){
+      digitalWrite(PIN_FLASH,LOW);
+   }
    if (!fb) {
       DBG("Camera capture failed");
       return ESP_FAIL;
@@ -254,7 +264,7 @@ static esp_err_t take_send_photo(){
 
    esp_err_t err = esp_http_client_perform(http_client);
    if (err == ESP_OK) {
-      DBG_noln(" > HTTP_CLIENT_STATUS_CODE");
+      DBG_noln(" > HTTP_CLIENT_STATUS_CODE: ");
       DBG(esp_http_client_get_status_code(http_client));
    }
 
