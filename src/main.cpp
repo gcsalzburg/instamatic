@@ -83,7 +83,7 @@ void setup(){
 
    // Setup LED
    strip.begin();
-   strip.setBrightness(20); // max = 255
+   strip.setBrightness(45); // max = 255
    strip.setPixelColor(0,0,0,0);
    strip.show(); // Initialize all pixels to 'off'
 
