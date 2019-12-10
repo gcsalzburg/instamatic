@@ -25,6 +25,12 @@
 // Switch definitions
 #define DEBOUNCE_INTERVAL   25
 Bounce shutter = Bounce(PIN_SHUTTER,DEBOUNCE_INTERVAL);
+enum shutter_states{
+   ready,
+   primed,
+   take
+};
+shutter_states shutter_state = ready;
 
 // Camera buffer, URL and picture name
 camera_fb_t *fb = NULL;
@@ -35,6 +41,9 @@ String pic_url  = "";
 const uint16_t wifi_timeout_limit = 20*1000;
 bool has_wifi = false;
 
+// Camera
+bool has_camera = false;
+
 // LED control
 typedef struct{
 	uint16_t on;
@@ -44,27 +53,32 @@ typedef struct{
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(1, PIN_LED, NEO_GRB + NEO_KHZ800);
 
-Light_t light_boot = {300,300,strip.Color(255,255,0)};
-Light_t light_ready = {3000,30,strip.Color(0,255,0)};
-Light_t light_capture = {1000,0,strip.Color(0,0,255)};
-Light_t light_upload = {150,0,strip.Color(200,0,200)};
+// Light patterns
+Light_t light_boot    = {300,  300, strip.Color(255,255,0)   };
+Light_t light_error   = {1000, 0,   strip.Color(255,0,0)     };
+Light_t light_ready   = {3000, 30,  strip.Color(0,255,0)     };
+Light_t light_primed  = {250,  50,  strip.Color(0,255,0)     };
+Light_t light_capture = {1000, 0,   strip.Color(255,255,255) };
+Light_t light_upload  = {150,  0,   strip.Color(200,0,200)   };
 Light_t *light_state;   // Which light is it currently showing
 
 // Function prototypes
 void set_led_state(Light_t *new_state);
-static esp_err_t take_send_photo(void);
+static bool take_send_photo(void);
 esp_err_t _http_event_handler(esp_http_client_event_t *evt);
 
 // Task function prototypes
 void task_check_connection();
 void task_flash_led();
 void task_check_buttons();
+void task_handle_shutter();
 
 // Table of tasks
 CAVE::Task loop_tasks[] = {
- //  {task_check_connection, 500}, // Delay between connection tests
+   {task_check_connection, 500}, // Delay between connection tests
    {task_flash_led,        16},  // 50fps      
-   {task_check_buttons,    10}   // Fast sampling of button pushes    
+   {task_check_buttons,    10},  // Fast sampling of button pushes 
+   {task_handle_shutter,   25}   // Can tolerate small delay here    
 };
 
 void setup(){
@@ -108,39 +122,31 @@ void setup(){
    config.pin_reset = RESET_GPIO_NUM;
    config.xclk_freq_hz = 20000000;
    config.pixel_format = PIXFORMAT_JPEG;
-   //init with high specs to pre-allocate larger buffers
-   if (psramFound()) {
-      config.frame_size = FRAMESIZE_SXGA;
-      config.jpeg_quality = 10;
-      config.fb_count = 2;
-   } else {
-      config.frame_size = FRAMESIZE_SVGA;
-      config.jpeg_quality = 12;
-      config.fb_count = 1;
-   }
+   config.frame_size = FRAMESIZE_XGA;
+   config.jpeg_quality = 8;
+   config.fb_count = 2;
+   
+   // Post a hello
+   DBG("");
+   DBG("[[ instamatic ]]");
+   DBG("");
 
-   // camera init
+   // Camera init
    esp_err_t err = esp_camera_init(&config);
    if (err != ESP_OK) {
       DBG("Camera init failed with error 0x%x");
       DBG(err);
-   //   return;
+      set_led_state(&light_error);
+   }else{
+      DBG("Camera loaded");
+      has_camera = true;
    }
 
-   // Change extra settings if required
-   //sensor_t * s = esp_camera_sensor_get();
-   //s->set_vflip(s, 0);       //flip it back
-   //s->set_brightness(s, 1);  //up the blightness just a bit
-   //s->set_saturation(s, -2); //lower the saturation
-
-   // Enable timer wakeup for ESP32 sleep
-   //esp_sleep_enable_timer_wakeup( TIME_TO_SLEEP );
-
-   DBG("");
-   DBG("[[ instamatic ]]");
-   DBG("");
-   DBG_noln("Connecting to: "); DBG(ssid);
-   WiFi.begin(ssid, pass);
+   // Connect to wifi
+   if(has_camera){
+      DBG_noln("Connecting to: "); DBG(ssid);
+      WiFi.begin(ssid, pass);
+   }
 }
 
 // Main loop timer
@@ -157,7 +163,7 @@ void set_led_state(Light_t *new_state){
 
 // Checks if wifi connection has been set yet
 void task_check_connection(){
-   if((millis() < wifi_timeout_limit) && !has_wifi){
+   if((millis() < wifi_timeout_limit) && !has_wifi && has_camera){
       DBG_noln(".");
       if(WiFi.status() == WL_CONNECTED){
          DBG("");
@@ -184,14 +190,75 @@ void task_flash_led(){
 
 // Check for button presses on shutter etc... 
 void task_check_buttons(){
-   shutter.update();
-	DBG(shutter.read());
-/*	if(shutter.fell()){
-      DBG("Shutter pressed");
-      if(has_wifi){
-         take_send_photo();
+   if(has_wifi && has_camera){
+      shutter.update();
+      if(shutter.rose()){
+         DBG("Shutter primed");
+         shutter_state = primed;
+         set_led_state(&light_primed);
+      }else if(shutter.fell()){
+         DBG("Shutter fired!");
+         shutter_state = take;
+         set_led_state(&light_capture);
       }
-  }*/
+   }
+}
+
+void task_handle_shutter(){
+   if(shutter_state == take){
+      if (take_send_photo()){
+         set_led_state(&light_ready);
+      }else{
+         set_led_state(&light_error);
+         has_camera = false;
+      }
+      shutter_state = ready;
+   }
+}
+
+// Captures a picture
+static bool take_send_photo(){
+   DBG("Taking picture...");
+   camera_fb_t * fb = NULL;
+
+   if(USE_FLASH){
+      digitalWrite(PIN_FLASH,HIGH);
+      delay(200);
+   }
+   fb = esp_camera_fb_get();
+   if(USE_FLASH){
+      delay(50);
+      digitalWrite(PIN_FLASH,LOW);
+   }
+   if (!fb) {
+      DBG("Camera capture failed");
+      return false;
+   }
+   set_led_state(&light_upload);
+
+   esp_http_client_handle_t http_client;
+   esp_http_client_config_t config_client = {0};
+   config_client.url = post_url;
+   config_client.event_handler = _http_event_handler;
+   config_client.method = HTTP_METHOD_POST;
+
+   http_client = esp_http_client_init(&config_client);
+
+   esp_http_client_set_post_field(http_client, (const char *)fb->buf, fb->len);
+
+   esp_http_client_set_header(http_client, "Content-Type", "image/jpg");
+
+   esp_err_t err = esp_http_client_perform(http_client);
+   if (err == ESP_OK) {
+      DBG_noln(" > HTTP_CLIENT_STATUS_CODE: ");
+      DBG(esp_http_client_get_status_code(http_client));
+   }
+
+   esp_http_client_cleanup(http_client);
+
+   esp_camera_fb_return(fb);
+
+   return true;
 }
 
 
@@ -226,53 +293,4 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt){
          break;
   }
   return ESP_OK;
-}
-
-// Captures a picture
-static esp_err_t take_send_photo(){
-   set_led_state(&light_capture);
-   DBG("Taking picture...");
-   camera_fb_t * fb = NULL;
-   esp_err_t res = ESP_OK;
-
-   if(USE_FLASH){
-      digitalWrite(PIN_FLASH,HIGH);
-   }
-   delay(200);
-   fb = esp_camera_fb_get();
-   delay(50);
-   if(USE_FLASH){
-      digitalWrite(PIN_FLASH,LOW);
-   }
-   if (!fb) {
-      DBG("Camera capture failed");
-      return ESP_FAIL;
-   }
-   set_led_state(&light_upload);
-
-   esp_http_client_handle_t http_client;
-
-   esp_http_client_config_t config_client = {0};
-   config_client.url = post_url;
-   config_client.event_handler = _http_event_handler;
-   config_client.method = HTTP_METHOD_POST;
-
-   http_client = esp_http_client_init(&config_client);
-
-   esp_http_client_set_post_field(http_client, (const char *)fb->buf, fb->len);
-
-   esp_http_client_set_header(http_client, "Content-Type", "image/jpg");
-
-   esp_err_t err = esp_http_client_perform(http_client);
-   if (err == ESP_OK) {
-      DBG_noln(" > HTTP_CLIENT_STATUS_CODE: ");
-      DBG(esp_http_client_get_status_code(http_client));
-   }
-
-   esp_http_client_cleanup(http_client);
-
-   esp_camera_fb_return(fb);
-   set_led_state(&light_ready);
-
-   return res;
 }
