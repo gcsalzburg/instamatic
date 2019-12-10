@@ -62,7 +62,7 @@ void task_check_buttons();
 
 // Table of tasks
 CAVE::Task loop_tasks[] = {
-   {task_check_connection, 500}, // Delay between connection tests
+ //  {task_check_connection, 500}, // Delay between connection tests
    {task_flash_led,        16},  // 50fps      
    {task_check_buttons,    10}   // Fast sampling of button pushes    
 };
@@ -124,7 +124,7 @@ void setup(){
    if (err != ESP_OK) {
       DBG("Camera init failed with error 0x%x");
       DBG(err);
-      return;
+   //   return;
    }
 
    // Change extra settings if required
@@ -185,12 +185,13 @@ void task_flash_led(){
 // Check for button presses on shutter etc... 
 void task_check_buttons(){
    shutter.update();
-	if(shutter.fell()){
+	DBG(shutter.read());
+/*	if(shutter.fell()){
       DBG("Shutter pressed");
       if(has_wifi){
          take_send_photo();
       }
-  }
+  }*/
 }
 
 
