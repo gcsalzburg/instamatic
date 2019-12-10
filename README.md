@@ -82,3 +82,13 @@ From: https://stackoverflow.com/a/30295011/10240581
 
 Using paramiko to automatically get SSH host key:
 https://www.reddit.com/r/Python/comments/5ib6bg/how_can_i_use_with_pysftp_and_set_missing_host/
+
+## How to adjust the camera properties
+
+```c++
+// Change extra settings if required
+sensor_t * s = esp_camera_sensor_get();
+// s->set_vflip(s, 0);       //flip it back
+s->set_brightness(s, 3);  //up the blightness just a bit
+//s->set_saturation(s, -2); //lower the saturation
+```
