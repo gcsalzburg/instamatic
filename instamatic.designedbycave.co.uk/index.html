@@ -4,28 +4,27 @@
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width,initial-scale=1">
 		<title>instamatic</title>
-        <link rel="stylesheet" href="styles.css">
-        <link href="https://fonts.googleapis.com/css?family=Bitter" rel="stylesheet">
-        <script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
-        <script>
-        $(function(){
-
+      <link rel="stylesheet" href="styles.css">
+      <link href="https://fonts.googleapis.com/css?family=Bitter" rel="stylesheet">
+      <script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+      <script>
+         $(function(){
             var photos = $("#photos");
             function reload_photos(){
-                console.log("Loading photos...");
-                $.getJSON("get_files.php", function(data){
-                    $.each(data.files, function(i,v){
+                  console.log("Loading photos...");
+                  $.getJSON("get_files.php", function(data){
+                     $.each(data.files, function(i,v){
                         if(!photos.find("img[src='camera/"+v.file+"']").length){
-                            photos.prepend('<img src="camera/'+v.file+'">');
+                           var html = '<div class="img_render"><img src="camera/'+v.file+'"></div>';
+                           photos.prepend(html);
                         }
-                    });
-                });
-                setTimeout(reload_photos, 5000);
+                     });
+                  });
+                  setTimeout(reload_photos, 5000);
             }
-
             reload_photos();
-        });
-        </script>
+         });
+      </script>
 
 
 	</head>

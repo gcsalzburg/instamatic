@@ -1,24 +1,34 @@
 body{
-    background-color: #333;
+   background-color: #fff;
 }
 
 h1{
-    font-family: 'Bitter', serif;
-    margin: 30px;
-    color: #fff;
-    font-weight: normal;
+   font-family: 'Bitter', serif;
+   margin: 30px;
+   color: #555;
+   font-weight: bold;
+   font-size: 2em;
+   text-align: center;
 }
 
 .photos{
-    display: flex;
-    margin: 0 30px;
-    flex-wrap: wrap;
+   display: flex;
+   margin: 0 30px;
+   flex-wrap: wrap;
+   justify-content: center;
+}
+
+.img_render{
+   display: block;
+   margin: 5px;
+   border: 5px solid #dbdbdb;
+   width: 300px;
+   height: 300px;
+   overflow: hidden;
 }
 
 .photos img{
-    display: block;
-    width: 400px;
-    height: 300px;
-    margin: 0 15px 15px 0;
-    border: 5px solid #222;
+   display: block;
+   width: 400px;
+   transform: rotate(90deg) translateY(-50px);
 }
