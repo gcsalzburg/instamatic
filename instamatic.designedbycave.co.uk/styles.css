@@ -30,5 +30,5 @@ h1{
 .photos img{
    display: block;
    width: 400px;
-   transform: rotate(90deg) translateY(-50px);
+   transform: rotate(90deg) translateY(50px);
 }
