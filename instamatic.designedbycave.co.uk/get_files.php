@@ -3,26 +3,35 @@ header('Content-Type: application/json');
 
 $dir          = "camera/"; //path
 
-$list = array(); //main array
+$all_pics = array(); //main array
 
 if(is_dir($dir)){
-    if($dh = opendir($dir)){
-        while(($file = readdir($dh)) != false){
+   if($dh = opendir($dir)){
+      while(($pic = readdir($dh)) != false){
 
-            if($file == "." or $file == ".."){
-                //...
-            } else { //create object with two fields
-                $list3 = array(
-                'file' => $file, 
-                'size' => filesize($file));
-                array_push($list, $list3);
-            }
-        }
-    }
+         if($pic == "." or $pic == ".."){
+               //...
+         }else{
+            $this_pic = array(
+               'file'        => $pic, 
+               'size'        => filesize($dir.$pic),
+               'time'        => filemtime($dir.$pic),
+               'time_human'  => date ("Y F d, H:i:s.", filemtime($dir.$pic))
+            );
+            
+            // Add to pictures array
+            array_push($all_pics, $this_pic);
+         }
+      }
+   }
 
-    $return_array = array('files'=> $list);
+   // sort by time, array_multisort needs a column list
+   // https://www.php.net/manual/en/function.array-multisort.php
+   $time  = array_column($all_pics, 'time');
+   array_multisort($time, SORT_NUMERIC, $all_pics);
 
-    echo json_encode($return_array);
+   $return_array = array('files'=> $all_pics);
+   echo json_encode($return_array);
 }
 
 ?>
