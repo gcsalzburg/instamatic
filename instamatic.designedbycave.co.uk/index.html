@@ -6,32 +6,45 @@
 		<title>instamatic</title>
       <link rel="stylesheet" href="styles.css">
       <link href="https://fonts.googleapis.com/css?family=Bitter" rel="stylesheet">
-      <script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
-      <script>
-         $(function(){
-            var photos = $("#photos");
-            function reload_photos(){
-                  console.log("Loading photos...");
-                  $.getJSON("get_files.php", function(data){
-                     $.each(data.files, function(i,v){
-                        if(!photos.find("img[src='camera/"+v.file+"']").length){
-                           var html = '<div class="img_render"><img src="camera/'+v.file+'"></div>';
-                           photos.prepend(html);
-                        }
-                     });
-                  });
-                  setTimeout(reload_photos, 5000);
-            }
-            reload_photos();
-         });
-      </script>
-
-
 	</head>
 	<body>
-        <h1>instamatic</h1>
+      
+      <h1>instamatic</h1>
 		<section id="photos" class="photos"></section>
-			
-	</body>
 
+      <script>
+         var photos = document.getElementById("photos");
+         document.addEventListener('DOMContentLoaded', function(){
+            reload_photos();
+         });
+
+         function reload_photos(){
+            console.log("Loading photos...");
+
+            getCORS('get_files.php', function(request){
+               var data = JSON.parse(request.currentTarget.response || request.target.responseText);
+               var f = data.files;
+               for(var i=0, len=f.length; i<len; i++){
+                  if(!document.getElementById("pic_"+f[i].time)){
+                     var insert_html = '<div id="pic_'+f[i].time+'" class="img_render"><img src="camera/'+f[i].file+'"></div>';
+                     photos.innerHTML = insert_html + photos.innerHTML;
+                  }
+               }
+            
+               setTimeout(reload_photos, 5000);
+            });
+         }
+
+         function getCORS(url, success) {
+            var xhr = new XMLHttpRequest();
+            if (!('withCredentials' in xhr)) xhr = new XDomainRequest(); // fix IE8/9
+            xhr.open('GET', url);
+            xhr.onload = success;
+            xhr.send();
+            return xhr;
+         }
+      </script>
+
+      
+   </body>
 </html>
